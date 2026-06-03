@@ -684,61 +684,62 @@ const SHEET_NAME = 'Base de Dados';
 const MONTHS = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 
 // ── CARREGAR DO GOOGLE SHEETS ──
-function carregarDoSheets() {
+async function carregarDoSheets() {
   showStatus('⟳ Carregando dados...');
+  try {
+    // Exporta aba como CSV público
+    const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(SHEET_NAME)}`;
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const text = await resp.text();
 
-  // Remove script anterior se existir
-  const old = document.getElementById('sheetsScript');
-  if (old) old.remove();
+    const lines = text.trim().split('\n');
+    // Pula cabeçalho (linha 0)
+    transactions = lines.slice(1).map((line, i) => {
+      try {
+        const cols = parseCSVLine(line);
+        // Cols: Data(0), Descrição(1), Categoria(2), Banco(3), Tipo(4), Valor(5), Entidade(6), Mês(7), Origem(8)
+        const rawDate = cols[0] || '';
+        let date = '';
+        // Formato yyyy-mm-dd ou dd/mm/yyyy
+        const m1 = rawDate.match(/(\d{4})-(\d{2})-(\d{2})/);
+        const m2 = rawDate.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+        if (m1) date = `${m1[1]}-${m1[2]}-${m1[3]}`;
+        else if (m2) date = `${m2[3]}-${m2[2]}-${m2[1]}`;
+        else return null;
 
-  const callback = 'sheetsCallback_' + Date.now();
-  const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&tq=select+*&sheet=${encodeURIComponent(SHEET_NAME)}&callback=${callback}`;
+        const desc     = cols[1] || '';
+        const category = cols[2] || 'Outros';
+        const bank     = cols[3] || '';
+        const type     = cols[4] || 'saida';
+        const amount   = parseFloat((cols[5] || '0').replace(',','.')) || 0;
+        const entity   = cols[6] || 'PF';
+        const origem   = cols[8] || 'Outro';
 
-  window[callback] = function(json) {
-    try {
-      const rows = json.table.rows;
-      transactions = rows.map((row, i) => {
-        try {
-          const cols = row.c;
-          let date = '';
-          if (cols[0] && cols[0].v) {
-            if (typeof cols[0].v === 'string' && cols[0].v.startsWith('Date(')) {
-              const parts = cols[0].v.replace('Date(','').replace(')','').split(',');
-              const ano = parts[0];
-              const mes = String(parseInt(parts[1])+1).padStart(2,'0');
-              const dia = String(parts[2]).padStart(2,'0');
-              date = `${ano}-${mes}-${dia}`;
-            } else if (cols[0].f) {
-              const f = cols[0].f;
-              const m = f.match(/(\d{2})\/(\d{2})\/(\d{4})/);
-              if (m) date = `${m[3]}-${m[2]}-${m[1]}`;
-            }
-          }
-          const desc     = cols[1]?.v || '';
-          const category = cols[2]?.v || 'Outros';
-          const bank     = cols[3]?.v || '';
-          const type     = cols[4]?.v || 'saida';
-          const amount   = typeof cols[5]?.v === 'number' ? cols[5].v : parseFloat(String(cols[5]?.v||'0').replace(',','.')) || 0;
-          const entity   = cols[6]?.v || 'PF';
-          const origem   = cols[8]?.v || 'Outro';
-          return { id: i, date, desc, category, bank, type, amount: Math.abs(amount), entity, origem };
-        } catch(e) { return null; }
-      }).filter(t => t && t.desc && t.date);
+        if (!desc) return null;
+        return { id: i, date, desc, category, bank, type, amount: Math.abs(amount), entity, origem };
+      } catch(e) { return null; }
+    }).filter(Boolean);
 
-      showStatus(`✓ ${transactions.length} lançamentos carregados`);
-      render();
-    } catch(e) {
-      console.error(e);
-      showStatus('⚠ Erro ao processar dados.');
-    }
-    delete window[callback];
-  };
+    showStatus(`✓ ${transactions.length} lançamentos carregados`);
+    render();
+  } catch(e) {
+    console.error(e);
+    showStatus('⚠ Erro ao carregar. Verifique o acesso à planilha.');
+  }
+}
 
-  const script = document.createElement('script');
-  script.id = 'sheetsScript';
-  script.src = url;
-  script.onerror = () => showStatus('⚠ Erro ao carregar. Verifique o acesso à planilha.');
-  document.head.appendChild(script);
+function parseCSVLine(line) {
+  const cols = [];
+  let cur = '', inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') { inQ = !inQ; continue; }
+    if (c === ',' && !inQ) { cols.push(cur.trim()); cur = ''; }
+    else cur += c;
+  }
+  cols.push(cur.trim());
+  return cols;
 }
 
 // ── ENTITY TOGGLE ──
@@ -1129,6 +1130,9 @@ window.onload = () => {
   document.getElementById('periodSelect').value = String(now.getMonth());
   carregarDoSheets();
 };
+
+// Torna carregarDoSheets acessível ao botão sincronizar
+window.carregarDoSheets = carregarDoSheets;
 </script>
 </body>
 </html>
