@@ -624,8 +624,8 @@ async function carregarDoSheets() {
     showStatus(`✓ ${transactions.length} lançamentos carregados`);
     render();
   } catch(e) {
-    console.error(e);
-    showStatus('⚠ Erro ao carregar. Verifique o acesso à planilha.');
+    console.error('Erro geral:', e);
+    showStatus(`⚠ Erro: ${e.message}`);
   }
 }
 
@@ -676,9 +676,12 @@ async function carregarTotaisDashboard() {
 
 async function carregarLancamentos() {
   const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(SHEET_NAME)}`;
+  console.log('Carregando:', url);
   const resp = await fetch(url);
-  if (!resp.ok) throw new Error('HTTP ' + resp.status);
+  console.log('Status:', resp.status, resp.ok);
+  if (!resp.ok) throw new Error('HTTP ' + resp.status + ' ao carregar Base de Dados');
   const text = await resp.text();
+  console.log('Primeiros 200 chars:', text.substring(0,200));
 
   const lines = text.trim().split('\n');
   transactions = lines.slice(1).map((line, i) => {
