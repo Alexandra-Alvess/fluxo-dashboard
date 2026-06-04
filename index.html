@@ -639,6 +639,8 @@ async function carregarTotaisDashboard() {
   // Cols: MÊS(0), DESPESA(1), RECEITA(2), LUCRO(3), ?(4), REND(5), ?(6), CARTÃO(7), ?(8), BANCO(9), VALOR(10)
   saldoDiarioData = [];
   let totalSaldoDiario = 0;
+  let lendoSaldoDiario = false;
+  let pararSaldoDiario = false;
 
   lines.slice(1).forEach(line => {
     const cols = parseCSVLine(line);
@@ -652,22 +654,32 @@ async function carregarTotaisDashboard() {
       monthlyTotals[idx] = { receita, despesa };
     }
 
-    // Saldo diário: col J(9)=banco, col K(10)=valor
-    const banco = (cols[9] || '').trim();
+    // Saldo diário: col I(8)=título, col J(9)=banco, col K(10)=valor
+    const titulo = (cols[8] || '').trim().toUpperCase();
+    const banco  = (cols[9] || '').trim();
     const rawVal = (cols[10] || '').trim();
-    if (banco && rawVal && !['BANCO','SALDO DIÁRIO','SALDO INICIAL'].includes(banco.toUpperCase())) {
-      const valor = parseFloat(rawVal.replace(/\./g,'').replace(',','.')) || 0;
-      if (valor !== 0) saldoDiarioData.push({ banco, valor });
+
+    // Detecta início do bloco SALDO DIÁRIO
+    if (titulo === 'SALDO DIÁRIO') { lendoSaldoDiario = true; return; }
+
+    // Para de ler ao encontrar SALDO INICIAL
+    if (titulo === 'SALDO INICIAL' || banco.toUpperCase() === 'SALDO INICIAL') {
+      pararSaldoDiario = true;
     }
 
-    // Total consolidado (linha com valor grande sem banco correspondente — col K sem col J)
-    if (!banco && rawVal) {
-      const v = parseFloat(rawVal.replace(/\./g,'').replace(',','.')) || 0;
-      if (v > 10000) totalSaldoDiario = v; // pega o total destacado
+    if (lendoSaldoDiario && !pararSaldoDiario) {
+      if (banco && rawVal && banco.toUpperCase() !== 'BANCO') {
+        const valor = parseFloat(rawVal.replace(/\./g,'').replace(',','.')) || 0;
+        if (valor > 0) saldoDiarioData.push({ banco, valor });
+      }
+      // Total destacado (linha sem banco mas com valor grande)
+      if (!banco && rawVal) {
+        const v = parseFloat(rawVal.replace(/\./g,'').replace(',','.')) || 0;
+        if (v > 1000) totalSaldoDiario = v;
+      }
     }
   });
 
-  // Se não achou total separado, soma os bancos
   if (totalSaldoDiario === 0) {
     totalSaldoDiario = saldoDiarioData.reduce((a,b) => a + b.valor, 0);
   }
@@ -875,37 +887,77 @@ function renderCharts(data) {
     }
   });
 
-  // Category donut
-  const exits = data.filter(t => t.type === 'saida');
-  const catTotals = {};
-  exits.forEach(t => { catTotals[t.category || 'Outros'] = (catTotals[t.category || 'Outros'] || 0) + t.amount; });
-  const cats = Object.keys(catTotals).sort((a,b) => catTotals[b] - catTotals[a]);
-  const catVals = cats.map(c => catTotals[c]);
-  const totalCat = catVals.reduce((a,b) => a+b, 0);
-  const palette = ['#2dd4a0','#f25c6e','#5b8af5','#f5a623','#a78bfa','#fb923c','#34d399','#f87171','#60a5fa','#e879f9','#4ade80','#fbbf24'];
+  // Category donut — despesas e receitas separadas
+  const catDespesas = {};
+  const catReceitas = {};
+  data.filter(t => t.type === 'saida').forEach(t => {
+    catDespesas[t.category || 'Outros'] = (catDespesas[t.category || 'Outros'] || 0) + t.amount;
+  });
+  data.filter(t => t.type === 'entrada').forEach(t => {
+    catReceitas[t.category || 'Outros'] = (catReceitas[t.category || 'Outros'] || 0) + t.amount;
+  });
+
+  const catsDes = Object.keys(catDespesas).sort((a,b) => catDespesas[b] - catDespesas[a]);
+  const catsRec = Object.keys(catReceitas).sort((a,b) => catReceitas[b] - catReceitas[a]);
+  const totalDes = catsDes.reduce((a,c) => a + catDespesas[c], 0);
+  const totalRec = catsRec.reduce((a,c) => a + catReceitas[c], 0);
+
+  const paletteDes = ['#f25c6e','#fb923c','#f5a623','#e879f9','#f87171','#fbbf24','#a78bfa','#60a5fa','#f43f5e','#fb7185'];
+  const paletteRec = ['#2dd4a0','#5b8af5','#34d399','#4ade80','#06b6d4','#818cf8','#a3e635','#22d3ee'];
 
   const ctx2 = document.getElementById('catChart').getContext('2d');
   if (catChart) catChart.destroy();
   catChart = new Chart(ctx2, {
     type: 'doughnut',
     data: {
-      labels: cats.length ? cats : ['Sem dados'],
-      datasets: [{ data: catVals.length ? catVals : [1], backgroundColor: cats.length ? palette.slice(0, cats.length) : ['#252a3a'], borderWidth: 0 }]
+      labels: [
+        ...catsDes.map(c => `↓ ${c}`),
+        ...catsRec.map(c => `↑ ${c}`)
+      ],
+      datasets: [
+        {
+          label: 'Despesas',
+          data: [...catsDes.map(c => catDespesas[c]), ...catsRec.map(() => 0)],
+          backgroundColor: [...paletteDes.slice(0, catsDes.length), ...catsRec.map(() => 'transparent')],
+          borderWidth: 0,
+          weight: 2
+        },
+        {
+          label: 'Receitas',
+          data: [...catsDes.map(() => 0), ...catsRec.map(c => catReceitas[c])],
+          backgroundColor: [...catsDes.map(() => 'transparent'), ...paletteRec.slice(0, catsRec.length)],
+          borderWidth: 0,
+          weight: 1
+        }
+      ]
     },
     options: {
       responsive: true,
-      cutout: '65%',
+      cutout: '55%',
       plugins: {
-        legend: { position: 'bottom', labels: { color: '#6b7294', font: { family: 'Syne', size: 10 }, padding: 8 } }
+        legend: { position: 'bottom', labels: { color: '#6b7294', font: { family: 'Syne', size: 10 }, padding: 6,
+          filter: (item) => item.text && !item.text.includes('undefined')
+        }},
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const val = ctx.raw;
+              if (!val) return null;
+              return ` ${ctx.label.replace(/^[↓↑] /,'')}: ${fmt(val)}`;
+            }
+          }
+        }
       }
     }
   });
 
-  // Total de despesas abaixo do gráfico
+  // Totais abaixo do gráfico
   const catTotalEl = document.getElementById('catTotal');
-  if (catTotalEl) catTotalEl.innerHTML = totalCat > 0
-    ? `Total despesas: <span style="color:var(--red);font-weight:600">${fmt(totalCat)}</span>`
-    : '';
+  if (catTotalEl) catTotalEl.innerHTML = `
+    <div style="display:flex;justify-content:center;gap:24px;margin-top:8px">
+      ${totalDes > 0 ? `<span>Despesas: <strong style="color:var(--red)">${fmt(totalDes)}</strong></span>` : ''}
+      ${totalRec > 0 ? `<span>Receitas: <strong style="color:var(--green)">${fmt(totalRec)}</strong></span>` : ''}
+    </div>`;
 
   // Saldo Diário por banco
   const sdEl = document.getElementById('saldoDiario');
