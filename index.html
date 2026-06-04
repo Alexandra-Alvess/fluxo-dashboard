@@ -116,7 +116,7 @@
   /* ── CARDS ── */
   .cards-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 16px;
     margin-bottom: 28px;
   }
@@ -174,7 +174,7 @@
   /* ── CHARTS ROW ── */
   .charts-row {
     display: grid;
-    grid-template-columns: 2fr 1fr;
+    grid-template-columns: 2fr 1fr 1fr;
     gap: 16px;
     margin-bottom: 28px;
   }
@@ -320,42 +320,7 @@
   .card:nth-child(3) { animation-delay: 0.15s; }
   .card:nth-child(4) { animation-delay: 0.2s; }
 
-  /* ── PENDING SECTION ── */
-  .pending-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
-    margin-bottom: 28px;
-  }
 
-  .pending-box {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 20px 24px;
-  }
-
-  .pending-title {
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 1.5px;
-    text-transform: uppercase;
-    color: var(--muted);
-    margin-bottom: 14px;
-  }
-
-  .pending-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 0;
-    border-bottom: 1px solid rgba(37,42,58,0.5);
-    font-size: 13px;
-  }
-
-  .pending-item:last-child { border: none; }
-  .pending-item .desc { font-family: 'Syne', sans-serif; }
-  .pending-item .val { font-family: 'DM Mono', monospace; font-size: 12.5px; }
 
   /* ── ADD MANUAL ENTRY ── */
   .btn-add {
@@ -508,24 +473,10 @@
       <div class="card-value" id="balance">R$ 0,00</div>
       <div class="card-sub" id="balanceSub">—</div>
     </div>
-    <div class="card amber">
-      <div class="card-label">A Pagar / Receber</div>
-      <div class="card-value" id="totalPending">R$ 0,00</div>
-      <div class="card-sub" id="pendingSub">0 pendentes</div>
-    </div>
+
   </div>
 
-  <!-- PENDING ITEMS -->
-  <div class="pending-row">
-    <div class="pending-box">
-      <div class="pending-title">📥 A Receber</div>
-      <div id="listReceive"><div class="empty-state" style="padding:20px"><p>Nenhum item a receber</p></div></div>
-    </div>
-    <div class="pending-box">
-      <div class="pending-title">📤 A Pagar</div>
-      <div id="listPay"><div class="empty-state" style="padding:20px"><p>Nenhum item a pagar</p></div></div>
-    </div>
-  </div>
+
 
   <!-- CHARTS -->
   <div class="charts-row">
@@ -535,7 +486,12 @@
     </div>
     <div class="chart-box">
       <div class="chart-title">Despesas por Categoria</div>
-      <canvas id="catChart" height="200"></canvas>
+      <canvas id="catChart" height="160"></canvas>
+      <div id="catTotal" style="text-align:center;margin-top:12px;font-family:'DM Mono',monospace;font-size:13px;color:var(--muted)"></div>
+    </div>
+    <div class="chart-box">
+      <div class="chart-title">Saldo Diário por Banco</div>
+      <div id="saldoDiario" style="margin-top:8px"></div>
     </div>
   </div>
 
@@ -651,6 +607,7 @@ const MONTHS = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov
 // ── TOTAIS MENSAIS DA ABA DASHBOARD ──
 // monthlyTotals[i] = { receita, despesa } para cada mês (0=JAN...11=DEZ)
 let monthlyTotals = Array(12).fill(null).map(() => ({ receita: 0, despesa: 0 }));
+let saldoDiarioData = []; // [{banco, valor}]
 
 // ── CARREGAR DO GOOGLE SHEETS ──
 async function carregarDoSheets() {
@@ -675,16 +632,27 @@ async function carregarTotaisDashboard() {
   const lines = text.trim().split('\n');
   const MESES = ['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
 
-  // Linha 0 = cabeçalho, linhas 1-12 = JAN a DEZ
-  // Cols: MÊS(0), DESPESA(1), RECEITA(2), LUCRO(3)
+  // Cols: MÊS(0), DESPESA(1), RECEITA(2), LUCRO(3), ?(4), REND(5), ?(6), CARTÃO(7), ?(8), BANCO(9), VALOR(10)
+  saldoDiarioData = [];
   lines.slice(1).forEach(line => {
     const cols = parseCSVLine(line);
     const mes = (cols[0] || '').trim().toUpperCase();
     const idx = MESES.indexOf(mes);
-    if (idx === -1) return;
-    const despesa = parseFloat((cols[1] || '0').replace(/\./g,'').replace(',','.')) || 0;
-    const receita = parseFloat((cols[2] || '0').replace(/\./g,'').replace(',','.')) || 0;
-    monthlyTotals[idx] = { receita, despesa };
+
+    // Totais mensais
+    if (idx !== -1) {
+      const despesa = parseFloat((cols[1] || '0').replace(/\./g,'').replace(',','.')) || 0;
+      const receita = parseFloat((cols[2] || '0').replace(/\./g,'').replace(',','.')) || 0;
+      monthlyTotals[idx] = { receita, despesa };
+    }
+
+    // Saldo diário: cols 9=banco, 10=valor (linhas que têm banco)
+    const banco = (cols[9] || '').trim();
+    const rawVal = (cols[10] || '').trim();
+    if (banco && rawVal && banco.toUpperCase() !== 'BANCO') {
+      const valor = parseFloat(rawVal.replace(/\./g,'').replace(',','.')) || 0;
+      if (valor > 0) saldoDiarioData.push({ banco, valor });
+    }
   });
 }
 
@@ -810,7 +778,6 @@ function render() {
   document.getElementById('totalPending').textContent = fmt(sumPending);
   document.getElementById('pendingSub').textContent = pending.length + ' pendente' + (pending.length !== 1 ? 's' : '');
 
-  renderPending(pending);
   renderCharts(data);
   renderTable(data);
   updateCatFilter();
@@ -892,9 +859,10 @@ function renderCharts(data) {
   const exits = data.filter(t => t.type === 'saida');
   const catTotals = {};
   exits.forEach(t => { catTotals[t.category || 'Outros'] = (catTotals[t.category || 'Outros'] || 0) + t.amount; });
-  const cats = Object.keys(catTotals);
+  const cats = Object.keys(catTotals).sort((a,b) => catTotals[b] - catTotals[a]);
   const catVals = cats.map(c => catTotals[c]);
-  const palette = ['#2dd4a0','#f25c6e','#5b8af5','#f5a623','#a78bfa','#fb923c','#34d399','#f87171'];
+  const totalCat = catVals.reduce((a,b) => a+b, 0);
+  const palette = ['#2dd4a0','#f25c6e','#5b8af5','#f5a623','#a78bfa','#fb923c','#34d399','#f87171','#60a5fa','#e879f9','#4ade80','#fbbf24'];
 
   const ctx2 = document.getElementById('catChart').getContext('2d');
   if (catChart) catChart.destroy();
@@ -906,12 +874,37 @@ function renderCharts(data) {
     },
     options: {
       responsive: true,
-      cutout: '68%',
+      cutout: '65%',
       plugins: {
-        legend: { position: 'bottom', labels: { color: '#6b7294', font: { family: 'Syne', size: 11 }, padding: 12 } }
+        legend: { position: 'bottom', labels: { color: '#6b7294', font: { family: 'Syne', size: 10 }, padding: 8 } }
       }
     }
   });
+
+  // Total de despesas abaixo do gráfico
+  const catTotalEl = document.getElementById('catTotal');
+  if (catTotalEl) catTotalEl.innerHTML = totalCat > 0
+    ? `Total despesas: <span style="color:var(--red);font-weight:600">${fmt(totalCat)}</span>`
+    : '';
+
+  // Saldo Diário por banco
+  const sdEl = document.getElementById('saldoDiario');
+  if (sdEl) {
+    if (saldoDiarioData.length === 0) {
+      sdEl.innerHTML = '<div style="color:var(--muted);font-size:13px">Sem dados</div>';
+    } else {
+      const totalSaldo = saldoDiarioData.reduce((a,b) => a + b.valor, 0);
+      sdEl.innerHTML = saldoDiarioData.map(s => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid rgba(37,42,58,0.5)">
+          <span style="font-family:'Syne',sans-serif;font-size:13px;color:var(--text)">${s.banco}</span>
+          <span style="font-family:'DM Mono',monospace;font-size:13px;color:var(--green)">${fmt(s.valor)}</span>
+        </div>`).join('') +
+        `<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;margin-top:4px">
+          <span style="font-family:'Syne',sans-serif;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted)">Total</span>
+          <span style="font-family:'DM Mono',monospace;font-size:15px;color:var(--blue);font-weight:600">${fmt(totalSaldo)}</span>
+        </div>`;
+    }
+  }
 }
 
 // ── TABLE ──
