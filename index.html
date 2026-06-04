@@ -639,8 +639,7 @@ async function carregarTotaisDashboard() {
   // Cols: MÊS(0), DESPESA(1), RECEITA(2), LUCRO(3), ?(4), REND(5), ?(6), CARTÃO(7), ?(8), BANCO(9), VALOR(10)
   saldoDiarioData = [];
   let totalSaldoDiario = 0;
-  let lendoSaldoDiario = false;
-  let pararSaldoDiario = false;
+  let parou = false;
 
   lines.slice(1).forEach(line => {
     const cols = parseCSVLine(line);
@@ -654,39 +653,28 @@ async function carregarTotaisDashboard() {
       monthlyTotals[idx] = { receita, despesa };
     }
 
-    // Col 9=banco ou total, col 10=valor — Saldo Diário
-    const col9 = (cols[9] || '').trim();
+    if (parou) return;
+
+    const col9  = (cols[9]  || '').trim();
     const col10 = (cols[10] || '').trim();
     const col9up = col9.toUpperCase();
 
-    // Detecta cabeçalho SALDO DIÁRIO
-    if (col9up.includes('SALDO DI')) {
-      lendoSaldoDiario = true;
-      return;
-    }
-
     // Para ao encontrar SALDO INICIAL
-    if (col9up.includes('SALDO INIC')) {
-      pararSaldoDiario = true;
-      return;
+    if (col9up === 'SALDO INICIAL') { parou = true; return; }
+
+    // Pula cabeçalhos e linhas vazias
+    if (!col9 || col9up === 'BANCO' || col9up.includes('SALDO')) return;
+
+    // Total: col9 é número grande, col10 vazio
+    if (!col10) {
+      const v = parseFloat(col9.replace(/\./g,'').replace(',','.')) || 0;
+      if (v > 1000) { totalSaldoDiario = v; return; }
     }
 
-    if (!lendoSaldoDiario || pararSaldoDiario) return;
-
-    // Linha de cabeçalho BANCO — pula
-    if (col9up === 'BANCO') return;
-
-    // Linha com banco e valor: col9=banco, col10=valor
+    // Banco + valor
     if (col9 && col10) {
       const valor = parseFloat(col10.replace(/\./g,'').replace(',','.')) || 0;
       if (valor > 0) saldoDiarioData.push({ banco: col9, valor });
-    }
-
-    // Total destacado: col9 tem o valor total, col10 vazio
-    // Ex: ["","150.517,49",""]
-    if (col9 && !col10) {
-      const v = parseFloat(col9.replace(/\./g,'').replace(',','.')) || 0;
-      if (v > 1000) totalSaldoDiario = v;
     }
   });
 
