@@ -654,29 +654,38 @@ async function carregarTotaisDashboard() {
       monthlyTotals[idx] = { receita, despesa };
     }
 
-    // Saldo diário: col I(8)=título, col J(9)=banco, col K(10)=valor
-    const titulo = (cols[8] || '').trim().toUpperCase();
-    const banco  = (cols[9] || '').trim();
-    const rawVal = (cols[10] || '').trim();
+    // Col J(9) e K(10) — Saldo Diário
+    const colJ = (cols[9] || '').trim();
+    const colK = (cols[10] || '').trim();
+    const colJup = colJ.toUpperCase();
 
-    // Detecta início do bloco SALDO DIÁRIO
-    if (titulo === 'SALDO DIÁRIO') { lendoSaldoDiario = true; return; }
-
-    // Para de ler ao encontrar SALDO INICIAL
-    if (titulo === 'SALDO INICIAL' || banco.toUpperCase() === 'SALDO INICIAL') {
-      pararSaldoDiario = true;
+    // Detecta cabeçalho SALDO DIÁRIO na col J
+    if (colJup.includes('SALDO DI')) {
+      lendoSaldoDiario = true;
+      return;
     }
 
-    if (lendoSaldoDiario && !pararSaldoDiario) {
-      if (banco && rawVal && banco.toUpperCase() !== 'BANCO') {
-        const valor = parseFloat(rawVal.replace(/\./g,'').replace(',','.')) || 0;
-        if (valor > 0) saldoDiarioData.push({ banco, valor });
-      }
-      // Total destacado (linha sem banco mas com valor grande)
-      if (!banco && rawVal) {
-        const v = parseFloat(rawVal.replace(/\./g,'').replace(',','.')) || 0;
-        if (v > 1000) totalSaldoDiario = v;
-      }
+    // Para ao encontrar SALDO INICIAL na col J
+    if (colJup.includes('SALDO INIC')) {
+      pararSaldoDiario = true;
+      return;
+    }
+
+    if (!lendoSaldoDiario || pararSaldoDiario) return;
+
+    // Linha de cabeçalho BANCO/VALOR — pula
+    if (colJup === 'BANCO') return;
+
+    // Linha com banco e valor
+    if (colJ && colK) {
+      const valor = parseFloat(colK.replace(/\./g,'').replace(',','.')) || 0;
+      if (valor > 0) saldoDiarioData.push({ banco: colJ, valor });
+    }
+
+    // Total destacado — col J vazia mas col K tem valor (linha do total mesclado)
+    if (!colJ && colK) {
+      const v = parseFloat(colK.replace(/\./g,'').replace(',','.')) || 0;
+      if (v > 1000) totalSaldoDiario = v;
     }
   });
 
@@ -893,7 +902,8 @@ function renderCharts(data) {
   data.filter(t => t.type === 'saida').forEach(t => {
     catDespesas[t.category || 'Outros'] = (catDespesas[t.category || 'Outros'] || 0) + t.amount;
   });
-  data.filter(t => t.type === 'entrada').forEach(t => {
+  // Receitas: apenas Nubank (banco base)
+  data.filter(t => t.type === 'entrada' && t.bank === 'Nubank').forEach(t => {
     catReceitas[t.category || 'Outros'] = (catReceitas[t.category || 'Outros'] || 0) + t.amount;
   });
 
