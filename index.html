@@ -613,8 +613,12 @@ let saldoDiarioData = []; // [{banco, valor}]
 async function carregarDoSheets() {
   showStatus('⟳ Carregando dados...');
   try {
-    // 1. Carrega totais da aba DASHBOARD
-    await carregarTotaisDashboard();
+    // 1. Tenta carregar totais da aba DASHBOARD (não bloqueia se falhar)
+    try {
+      await carregarTotaisDashboard();
+    } catch(e) {
+      console.warn('Erro ao carregar DASHBOARD:', e);
+    }
     // 2. Carrega lançamentos da aba Base de Dados
     await carregarLancamentos();
     showStatus(`✓ ${transactions.length} lançamentos carregados`);
