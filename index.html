@@ -634,26 +634,40 @@ async function carregarTotaisDashboard() {
 
   // Cols: MÊS(0), DESPESA(1), RECEITA(2), LUCRO(3), ?(4), REND(5), ?(6), CARTÃO(7), ?(8), BANCO(9), VALOR(10)
   saldoDiarioData = [];
+  let totalSaldoDiario = 0;
+
   lines.slice(1).forEach(line => {
     const cols = parseCSVLine(line);
     const mes = (cols[0] || '').trim().toUpperCase();
     const idx = MESES.indexOf(mes);
 
-    // Totais mensais
+    // Totais mensais (cols A-D)
     if (idx !== -1) {
       const despesa = parseFloat((cols[1] || '0').replace(/\./g,'').replace(',','.')) || 0;
       const receita = parseFloat((cols[2] || '0').replace(/\./g,'').replace(',','.')) || 0;
       monthlyTotals[idx] = { receita, despesa };
     }
 
-    // Saldo diário: cols 9=banco, 10=valor (linhas que têm banco)
+    // Saldo diário: col J(9)=banco, col K(10)=valor
     const banco = (cols[9] || '').trim();
     const rawVal = (cols[10] || '').trim();
-    if (banco && rawVal && banco.toUpperCase() !== 'BANCO') {
+    if (banco && rawVal && !['BANCO','SALDO DIÁRIO','SALDO INICIAL'].includes(banco.toUpperCase())) {
       const valor = parseFloat(rawVal.replace(/\./g,'').replace(',','.')) || 0;
-      if (valor > 0) saldoDiarioData.push({ banco, valor });
+      if (valor !== 0) saldoDiarioData.push({ banco, valor });
+    }
+
+    // Total consolidado (linha com valor grande sem banco correspondente — col K sem col J)
+    if (!banco && rawVal) {
+      const v = parseFloat(rawVal.replace(/\./g,'').replace(',','.')) || 0;
+      if (v > 10000) totalSaldoDiario = v; // pega o total destacado
     }
   });
+
+  // Se não achou total separado, soma os bancos
+  if (totalSaldoDiario === 0) {
+    totalSaldoDiario = saldoDiarioData.reduce((a,b) => a + b.valor, 0);
+  }
+  saldoDiarioData._total = totalSaldoDiario;
 }
 
 async function carregarLancamentos() {
@@ -891,17 +905,24 @@ function renderCharts(data) {
   const sdEl = document.getElementById('saldoDiario');
   if (sdEl) {
     if (saldoDiarioData.length === 0) {
-      sdEl.innerHTML = '<div style="color:var(--muted);font-size:13px">Sem dados</div>';
+      sdEl.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:12px 0">Sem dados</div>';
     } else {
-      const totalSaldo = saldoDiarioData.reduce((a,b) => a + b.valor, 0);
-      sdEl.innerHTML = saldoDiarioData.map(s => `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid rgba(37,42,58,0.5)">
+      const totalSaldo = saldoDiarioData._total || saldoDiarioData.reduce((a,b) => a + b.valor, 0);
+      sdEl.innerHTML =
+        // Cabeçalho estilo planilha
+        `<div style="display:grid;grid-template-columns:1fr 1fr;padding:8px 12px;background:var(--surface2);border-radius:6px;margin-bottom:6px">
+          <span style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted)">Banco</span>
+          <span style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted);text-align:right">Valor</span>
+        </div>` +
+        saldoDiarioData.map(s => `
+        <div style="display:grid;grid-template-columns:1fr 1fr;padding:9px 12px;border-bottom:1px solid rgba(37,42,58,0.4)">
           <span style="font-family:'Syne',sans-serif;font-size:13px;color:var(--text)">${s.banco}</span>
-          <span style="font-family:'DM Mono',monospace;font-size:13px;color:var(--green)">${fmt(s.valor)}</span>
+          <span style="font-family:'DM Mono',monospace;font-size:13px;color:var(--green);text-align:right">${fmt(s.valor)}</span>
         </div>`).join('') +
-        `<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;margin-top:4px">
-          <span style="font-family:'Syne',sans-serif;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted)">Total</span>
-          <span style="font-family:'DM Mono',monospace;font-size:15px;color:var(--blue);font-weight:600">${fmt(totalSaldo)}</span>
+        // Total em destaque
+        `<div style="display:grid;grid-template-columns:1fr 1fr;padding:12px;margin-top:8px;background:rgba(45,212,160,0.08);border-radius:8px;border:1px solid rgba(45,212,160,0.2)">
+          <span style="font-family:'Syne',sans-serif;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--green);align-self:center">Total</span>
+          <span style="font-family:'DM Mono',monospace;font-size:18px;color:var(--green);font-weight:600;text-align:right">${fmt(totalSaldo)}</span>
         </div>`;
     }
   }
