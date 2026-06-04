@@ -796,8 +796,7 @@ function render() {
   document.getElementById('balance').textContent = fmt(balance);
   document.getElementById('balance').style.color = balance >= 0 ? 'var(--green)' : 'var(--red)';
   document.getElementById('balanceSub').textContent = balance >= 0 ? 'positivo' : 'negativo';
-  document.getElementById('totalPending').textContent = fmt(sumPending);
-  document.getElementById('pendingSub').textContent = pending.length + ' pendente' + (pending.length !== 1 ? 's' : '');
+  // totalPending removido (card A Pagar/Receber excluído)
 
   renderCharts(data);
   renderTable(data);
