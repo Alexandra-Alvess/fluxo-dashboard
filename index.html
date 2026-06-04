@@ -714,10 +714,11 @@ async function carregarDoSheets() {
         const type     = cols[4] || 'saida';
         const amount   = parseFloat((cols[5] || '0').replace(',','.')) || 0;
         const entity   = cols[6] || 'PF';
+        const mes      = cols[7] || '';
         const origem   = cols[8] || 'Outro';
 
         if (!desc) return null;
-        return { id: i, date, desc, category, bank, type, amount: Math.abs(amount), entity, origem };
+        return { id: i, date, desc, category, bank, type, amount: Math.abs(amount), entity, mes, origem };
       } catch(e) { return null; }
     }).filter(Boolean);
 
@@ -758,11 +759,14 @@ function getFiltered() {
   const cat = document.getElementById('catFilter')?.value || 'all';
   const origem = document.getElementById('origemFilter')?.value || 'all';
 
+  const MES_MAP = {'JAN':0,'FEV':1,'MAR':2,'ABR':3,'MAI':4,'JUN':5,'JUL':6,'AGO':7,'SET':8,'OUT':9,'NOV':10,'DEZ':11};
+
   return transactions.filter(t => {
     if (t.entity !== currentEntity) return false;
     if (period !== 'all') {
-      const m = new Date(t.date).getMonth();
-      if (m !== parseInt(period)) return false;
+      // Usa campo mes se disponível (correto para parcelas), senão usa data
+      const mesTx = t.mes ? MES_MAP[t.mes.toUpperCase()] : new Date(t.date).getMonth();
+      if (mesTx !== parseInt(period)) return false;
     }
     if (search && !t.desc.toLowerCase().includes(search)) return false;
     if (type !== 'all' && t.type !== type) return false;
@@ -841,8 +845,10 @@ function renderCharts(data) {
   const monthlyIn = Array(12).fill(0);
   const monthlyOut = Array(12).fill(0);
 
+  const MES_MAP2 = {'JAN':0,'FEV':1,'MAR':2,'ABR':3,'MAI':4,'JUN':5,'JUL':6,'AGO':7,'SET':8,'OUT':9,'NOV':10,'DEZ':11};
   transactions.filter(t => t.entity === currentEntity && t.type !== 'pendente').forEach(t => {
-    const m = new Date(t.date).getMonth();
+    const m = t.mes ? MES_MAP2[t.mes.toUpperCase()] : new Date(t.date).getMonth();
+    if (m === undefined || m === null || isNaN(m)) return;
     if (t.type === 'entrada') monthlyIn[m] += t.amount;
     else monthlyOut[m] += t.amount;
   });
