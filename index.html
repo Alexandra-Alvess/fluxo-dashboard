@@ -654,6 +654,9 @@ async function carregarTotaisDashboard() {
       monthlyTotals[idx] = { receita, despesa };
     }
 
+    // Debug: loga primeiras linhas com col J preenchida
+    if ((cols[9]||'').trim()) console.log('CSV cols 8,9,10:', JSON.stringify([cols[8],cols[9],cols[10]]));
+
     // Col J(9) e K(10) — Saldo Diário
     const colJ = (cols[9] || '').trim();
     const colK = (cols[10] || '').trim();
