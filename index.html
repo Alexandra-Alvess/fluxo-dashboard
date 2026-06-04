@@ -75,32 +75,7 @@
     gap: 16px;
   }
 
-  /* ── PF/PJ TOGGLE ── */
-  .entity-toggle {
-    display: flex;
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    overflow: hidden;
-  }
 
-  .entity-toggle button {
-    padding: 8px 20px;
-    font-family: 'Syne', sans-serif;
-    font-size: 13px;
-    font-weight: 600;
-    letter-spacing: 0.5px;
-    border: none;
-    background: transparent;
-    color: var(--muted);
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-
-  .entity-toggle button.active {
-    background: var(--accent);
-    color: #0d0f14;
-  }
 
   /* ── PERIOD FILTER ── */
   .period-select {
@@ -490,10 +465,7 @@
 <header>
   <div class="logo">Fluxo<span>.</span></div>
   <div class="header-right">
-    <div class="entity-toggle">
-      <button class="active" id="btnPF" onclick="setEntity('PF')">PF</button>
-      <button id="btnPJ" onclick="setEntity('PJ')">PJ</button>
-    </div>
+
     <select class="period-select" id="periodSelect" onchange="render()">
       <option value="all">Todos os meses</option>
       <option value="0">Janeiro</option>
@@ -632,14 +604,7 @@
       </div>
     </div>
     <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Entidade</label>
-        <select class="form-select" id="fEntity">
-          <option value="PF">PF</option>
-          <option value="PJ">PJ</option>
-        </select>
-      </div>
-      <div class="form-group">
+      <div class="form-group full">
         <label class="form-label">Banco</label>
         <select class="form-select" id="fBank">
           <option>Nubank</option>
@@ -745,7 +710,9 @@ async function carregarLancamentos() {
       const category = cols[2] || 'Outros';
       const bank     = cols[3] || '';
       const type     = cols[4] || 'saida';
-      const amount   = parseFloat((cols[5] || '0').replace(',','.')) || 0;
+      // Formato brasileiro: 1.234,56 → remove pontos de milhar, troca vírgula por ponto
+      const rawAmount = (cols[5] || '0').replace(/\./g,'').replace(',','.');
+      const amount   = parseFloat(rawAmount) || 0;
       const entity   = cols[6] || 'PF';
       const mes      = cols[7] || '';
       const origem   = cols[8] || 'Outro';
@@ -769,13 +736,8 @@ function parseCSVLine(line) {
   return cols;
 }
 
-// ── ENTITY TOGGLE ──
-function setEntity(e) {
-  currentEntity = e;
-  document.getElementById('btnPF').classList.toggle('active', e === 'PF');
-  document.getElementById('btnPJ').classList.toggle('active', e === 'PJ');
-  render();
-}
+// ── ENTITY TOGGLE (desativado) ──
+function setEntity(e) { render(); }
 
 // ── FILTERED DATA ──
 function getFiltered() {
@@ -788,7 +750,7 @@ function getFiltered() {
   const MES_MAP = {'JAN':0,'FEV':1,'MAR':2,'ABR':3,'MAI':4,'JUN':5,'JUL':6,'AGO':7,'SET':8,'OUT':9,'NOV':10,'DEZ':11};
 
   return transactions.filter(t => {
-    if (t.entity !== currentEntity) return false;
+
     if (period !== 'all') {
       // Usa campo mes se disponível (correto para parcelas), senão usa data
       const mesTx = t.mes ? MES_MAP[t.mes.toUpperCase()] : new Date(t.date).getMonth();
@@ -811,13 +773,13 @@ function fmt(v) {
 function render() {
   const data = getFiltered();
   const period = document.getElementById('periodSelect').value;
-  const pending = transactions.filter(t => t.entity === currentEntity && t.type === 'pendente');
+  const pending = transactions.filter(t => t.type === 'pendente');
   const sumPending = pending.reduce((a,t) => a + t.amount, 0);
 
   // Usa totais da aba DASHBOARD para cards de receita/despesa/saldo
   let sumIn, sumOut, balance, countIn, countOut;
 
-  if (period !== 'all' && currentEntity === 'PF') {
+  if (period !== 'all') {
     // Mês específico: usa totais da planilha DASHBOARD (mais preciso)
     const m = parseInt(period);
     const tot = monthlyTotals[m];
@@ -890,14 +852,14 @@ function renderCharts(data) {
   const monthlyOut = Array(12).fill(0);
 
   // Usa totais da aba DASHBOARD para o gráfico de barras (mais preciso)
-  if (currentEntity === 'PF' && monthlyTotals.some(t => t.receita > 0 || t.despesa > 0)) {
+  if (monthlyTotals.some(t => t.receita > 0 || t.despesa > 0)) {
     monthlyTotals.forEach((tot, m) => {
       monthlyIn[m]  = tot.receita;
       monthlyOut[m] = tot.despesa;
     });
   } else {
     const MES_MAP2 = {'JAN':0,'FEV':1,'MAR':2,'ABR':3,'MAI':4,'JUN':5,'JUL':6,'AGO':7,'SET':8,'OUT':9,'NOV':10,'DEZ':11};
-    transactions.filter(t => t.entity === currentEntity && t.type !== 'pendente').forEach(t => {
+    transactions.filter(t => t.type !== 'pendente').forEach(t => {
       const m = t.mes ? MES_MAP2[t.mes.toUpperCase()] : new Date(t.date).getMonth();
       if (m === undefined || m === null || isNaN(m)) return;
       if (t.type === 'entrada') monthlyIn[m] += t.amount;
@@ -1163,12 +1125,11 @@ function saveEntry() {
   const type = document.getElementById('fType').value;
   const cat = document.getElementById('fCat').value.trim() || 'Outros';
   const origem = document.getElementById('fOrigem').value;
-  const entity = document.getElementById('fEntity').value;
   const bank = document.getElementById('fBank').value;
 
   if (!desc || isNaN(val) || !date) { alert('Preencha descrição, valor e data.'); return; }
 
-  transactions.push({ id: Date.now(), date, desc, amount: Math.abs(val), type, category: cat, bank, origem, entity });
+  transactions.push({ id: Date.now(), date, desc, amount: Math.abs(val), type, category: cat, bank, origem, entity: 'PF' });
   closeModal();
   render();
   showStatus('✓ Lançamento salvo');
