@@ -654,40 +654,38 @@ async function carregarTotaisDashboard() {
       monthlyTotals[idx] = { receita, despesa };
     }
 
-    // Debug: loga primeiras linhas com col J preenchida
-    if ((cols[9]||'').trim()) console.log('CSV cols 8,9,10:', JSON.stringify([cols[8],cols[9],cols[10]]));
+    // Col 9=banco ou total, col 10=valor — Saldo Diário
+    const col9 = (cols[9] || '').trim();
+    const col10 = (cols[10] || '').trim();
+    const col9up = col9.toUpperCase();
 
-    // Col J(9) e K(10) — Saldo Diário
-    const colJ = (cols[9] || '').trim();
-    const colK = (cols[10] || '').trim();
-    const colJup = colJ.toUpperCase();
-
-    // Detecta cabeçalho SALDO DIÁRIO na col J
-    if (colJup.includes('SALDO DI')) {
+    // Detecta cabeçalho SALDO DIÁRIO
+    if (col9up.includes('SALDO DI')) {
       lendoSaldoDiario = true;
       return;
     }
 
-    // Para ao encontrar SALDO INICIAL na col J
-    if (colJup.includes('SALDO INIC')) {
+    // Para ao encontrar SALDO INICIAL
+    if (col9up.includes('SALDO INIC')) {
       pararSaldoDiario = true;
       return;
     }
 
     if (!lendoSaldoDiario || pararSaldoDiario) return;
 
-    // Linha de cabeçalho BANCO/VALOR — pula
-    if (colJup === 'BANCO') return;
+    // Linha de cabeçalho BANCO — pula
+    if (col9up === 'BANCO') return;
 
-    // Linha com banco e valor
-    if (colJ && colK) {
-      const valor = parseFloat(colK.replace(/\./g,'').replace(',','.')) || 0;
-      if (valor > 0) saldoDiarioData.push({ banco: colJ, valor });
+    // Linha com banco e valor: col9=banco, col10=valor
+    if (col9 && col10) {
+      const valor = parseFloat(col10.replace(/\./g,'').replace(',','.')) || 0;
+      if (valor > 0) saldoDiarioData.push({ banco: col9, valor });
     }
 
-    // Total destacado — col J vazia mas col K tem valor (linha do total mesclado)
-    if (!colJ && colK) {
-      const v = parseFloat(colK.replace(/\./g,'').replace(',','.')) || 0;
+    // Total destacado: col9 tem o valor total, col10 vazio
+    // Ex: ["","150.517,49",""]
+    if (col9 && !col10) {
+      const v = parseFloat(col9.replace(/\./g,'').replace(',','.')) || 0;
       if (v > 1000) totalSaldoDiario = v;
     }
   });
