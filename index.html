@@ -885,14 +885,15 @@ function renderCharts(data) {
     }
   });
 
-  // Category donut — despesas e receitas separadas
+  // Category donut — despesas e receitas separadas (excluindo transferências)
+  const EXCLUIR_CAT = ['Transf. entre contas','Transferência','Cartão C6','Cartão Nubank','Cartão Inter PF','Cartão Emp.'];
   const catDespesas = {};
   const catReceitas = {};
-  data.filter(t => t.type === 'saida').forEach(t => {
+  data.filter(t => t.type === 'saida' && !EXCLUIR_CAT.includes(t.category)).forEach(t => {
     catDespesas[t.category || 'Outros'] = (catDespesas[t.category || 'Outros'] || 0) + t.amount;
   });
-  // Receitas: apenas Nubank (banco base)
-  data.filter(t => t.type === 'entrada' && t.bank === 'Nubank').forEach(t => {
+  // Receitas: apenas Nubank (banco base), excluindo transferências
+  data.filter(t => t.type === 'entrada' && t.bank === 'Nubank' && !EXCLUIR_CAT.includes(t.category)).forEach(t => {
     catReceitas[t.category || 'Outros'] = (catReceitas[t.category || 'Outros'] || 0) + t.amount;
   });
 
